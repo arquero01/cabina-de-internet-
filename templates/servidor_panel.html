@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Control Cabina</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #0f172a;
+            color: #e2e8f0;
+        }
+
+        h1 {
+            text-align: center;
+            padding: 20px;
+            font-size: 32px;
+        }
+
+        .contenedor {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 25px;
+            padding: 25px;
+        }
+
+        .pc {
+            background: #1e293b;
+            border-radius: 20px;
+            padding: 20px;
+            box-shadow: 0 0 15px rgba(0,0,0,0.6);
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .pc h2 {
+            margin: 0;
+            text-align: center;
+        }
+
+        .tiempo {
+            font-size: 32px;
+            text-align: center;
+            font-weight: bold;
+        }
+
+        .activo { color: #22c55e; }
+        .medio { color: #f59e0b; }
+        .agotado { color: #ef4444; }
+
+        .seccion {
+            background: #0f172a;
+            padding: 10px;
+            border-radius: 10px;
+        }
+
+        input {
+            width: 100%;
+            padding: 8px;
+            border-radius: 8px;
+            border: none;
+            margin-top: 5px;
+        }
+
+        button {
+            width: 100%;
+            margin-top: 8px;
+            padding: 8px;
+            border: none;
+            border-radius: 8px;
+            background: #22c55e;
+            color: black;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        button:hover {
+            background: #16a34a;
+        }
+
+        .botones-rapidos {
+            display: flex;
+            gap: 5px;
+        }
+
+        .botones-rapidos button {
+            flex: 1;
+            background: #38bdf8;
+        }
+    </style>
+</head>
+<body>
+
+<h1>🖥️ Panel de Control Cabina</h1>
+
+<div class="contenedor">
+    {% for pc, data in pcs.items() %}
+    <div class="pc">
+
+        <h2>{{ pc }}</h2>
+
+        <!-- TIEMPO -->
+        <div class="tiempo 
+            {% if data.tiempo > 1800 %}
+                activo
+            {% elif data.tiempo > 600 %}
+                medio
+            {% else %}
+                agotado
+            {% endif %}
+        " id="tiempo-{{ pc }}">
+            {{ data.tiempo_str }}
+        </div>
+
+        <!-- ASIGNAR TIEMPO -->
+        <div class="seccion">
+            <form action="/asignar" method="post">
+                <input type="hidden" name="nombre" value="{{ pc }}">
+                <input type="number" name="tiempo" min="1" placeholder="Minutos" required>
+                <button>Asignar Tiempo</button>
+            </form>
+
+            <div class="botones-rapidos">
+                <form action="/asignar" method="post">
+                    <input type="hidden" name="nombre" value="{{ pc }}">
+                    <button name="tiempo" value="30">+30</button>
+                </form>
+
+                <form action="/asignar" method="post">
+                    <input type="hidden" name="nombre" value="{{ pc }}">
+                    <button name="tiempo" value="60">+60</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- CONSUMO -->
+        <div class="seccion">
+            <form action="/nota" method="post">
+                <input type="hidden" name="nombre" value="{{ pc }}">
+                <input type="text" name="nota" value="{{ data.nota }}" placeholder="Ej: 2 cervezas o 5000">
+                <button>Guardar Consumo</button>
+            </form>
+        </div>
+
+    </div>
+    {% endfor %}
+</div>
+
+<script>
+async function actualizar() {
+    const res = await fetch("/datos");
+    const data = await res.json();
+
+    for (let pc in data) {
+        let tiempo = data[pc].tiempo;
+
+        let h = Math.floor(tiempo / 3600);
+        let m = Math.floor((tiempo % 3600) / 60);
+        let s = tiempo % 60;
+
+        let texto =
+            String(h).padStart(2, '0') + ":" +
+            String(m).padStart(2, '0') + ":" +
+            String(s).padStart(2, '0');
+
+        let el = document.getElementById("tiempo-" + pc);
+        if (el) el.textContent = texto;
+    }
+}
+
+setInterval(actualizar, 1000);
+</script>
+
+</body>
+</html>
