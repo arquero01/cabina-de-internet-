@@ -111,34 +111,22 @@
         " id="tiempo-{{ pc }}">
             {{ data.tiempo_str }}
         </div>
+        <div id="acciones-{{ pc }}"></div>
 
         <!-- ASIGNAR TIEMPO -->
         <div class="seccion">
             <form action="/asignar" method="post">
                 <input type="hidden" name="nombre" value="{{ pc }}">
-                <input type="number" name="tiempo" min="1" placeholder="Minutos" required>
+                <input type="text" name="tiempo_input" class="input-tiempo" placeholder="Ej: 2 o .30 o 1.30" required>
                 <button>Asignar Tiempo</button>
             </form>
-
-            <div class="botones-rapidos">
-                <form action="/asignar" method="post">
-                    <input type="hidden" name="nombre" value="{{ pc }}">
-                    <button name="tiempo" value="30">+30</button>
-                </form>
-
-                <form action="/asignar" method="post">
-                    <input type="hidden" name="nombre" value="{{ pc }}">
-                    <button name="tiempo" value="60">+60</button>
-                </form>
-            </div>
         </div>
 
         <!-- CONSUMO -->
         <div class="seccion">
             <form action="/nota" method="post">
                 <input type="hidden" name="nombre" value="{{ pc }}">
-                <input type="text" name="nota" value="{{ data.nota }}" placeholder="Ej: 2 cervezas o 5000">
-                <button>Guardar Consumo</button>
+                <textarea name="nota" rows="4" placeholder="Escribe comsumo... ">{{ data.nota }}</textarea>
             </form>
         </div>
 
@@ -147,28 +135,107 @@
 </div>
 
 <script>
+let alertados = {};
+
 async function actualizar() {
-    const res = await fetch("/datos");
-    const data = await res.json();
+    try {
+        const res = await fetch("/datos");
+        const data = await res.json();
 
-    for (let pc in data) {
-        let tiempo = data[pc].tiempo;
+        for (let pc in data) {
 
-        let h = Math.floor(tiempo / 3600);
-        let m = Math.floor((tiempo % 3600) / 60);
-        let s = tiempo % 60;
+            let tiempo = data[pc].tiempo; 
 
-        let texto =
-            String(h).padStart(2, '0') + ":" +
-            String(m).padStart(2, '0') + ":" +
-            String(s).padStart(2, '0');
+            let h = Math.floor(tiempo / 3600);
+            let m = Math.floor((tiempo % 3600) / 60);
+            let s = tiempo % 60;
 
-        let el = document.getElementById("tiempo-" + pc);
-        if (el) el.textContent = texto;
+            let texto =
+                String(h).padStart(2, '0') + ":" +
+                String(m).padStart(2, '0') + ":" +
+                String(s).padStart(2, '0');
+
+            let el = document.getElementById("tiempo-" + pc);
+            if (el) el.textContent = texto;
+
+            // 🚨 ALERTA CUANDO TERMINA
+            if (tiempo === 0 && !alertados[pc]) {
+                alertados[pc] = true;
+
+                let cont = document.getElementById("acciones-" + pc);
+                if (cont) {
+                    cont.innerHTML = `
+                        <div style="color:red;">⏰ Tiempo terminado</div>
+                        <button onclick="agregarTiempo('${pc}', 30)">+30 min</button>
+                        <button onclick="agregarTiempo('${pc}', 60)">+60 min</button>
+                    `;
+                }
+            }
+        }
+    } catch (error) {
+        console.log("ERROR:", error);
     }
 }
 
-setInterval(actualizar, 1000);
+function agregarTiempo(pc, minutos) {
+    fetch("/asignar", {
+        method: "POST",
+        headers: {"Content-Type": "application/x-www-form-urlencoded"},
+        body: `nombre=${pc}&tiempo=${minutos}`
+    });
+}
+
+// 🔥 IMPORTANTE
+window.onload = () => {
+    setInterval(actualizar, 1000);
+};
+</script>
+<script>
+    function convertirTiempo(valor){
+        valor = valor.trim();
+        if (valor.includes(".")){
+            let partes = valor.split(".");
+            let horas = parseInt(partes[0]) || 0;
+            let minutos = parseInt(partes[1]) || 0;
+            return (horas * 60) + minutos;
+        }else {
+            return parseInt(valor)*60;
+        }
+    }
+</script>
+<script>
+document.querySelectorAll(".input-tiempo").forEach(input =>{
+    input.addEventListener("keydown", function(e){
+        if (e.key === "Enter"){
+            e.preventDefault();
+
+            let valor = this.value;
+            let minutos = convertirTiempo(valor);
+
+            let form = this.closest("form");
+
+            let hidden = document.createElement("input");
+            hidden.type = "hidden";
+            hidden.name = "tiempo";
+            hidden.value = minutos;
+
+            form.appendChild(hidden);
+            form.submit();
+        }
+    });
+});
+</script>
+<script>
+    document.querySelectorAll("textarea").forEach(area =>{
+        area.addEventListener("keyup", function(){
+            let form = this.closest("form");
+            let data = new FormData(form);
+            fetch("/nota", {
+                method: "post",
+                body: data
+            });
+        });
+    });
 </script>
 
 </body>

@@ -1,132 +1,105 @@
 from flask import Flask, request, render_template, redirect
-import threading
 import time
 
 app = Flask(__name__)
 
 pcs = {}
 
+# ---------------- PANEL ----------------
 @app.route("/")
 def panel():
     pcs_formateado = {}
+    ahora = time.time()
 
-    for pc in pcs:
+    for pc, data in pcs.items():
+        restante = int(data.get("fin", 0) - ahora)
+        if restante < 0:
+            restante = 0
+
         pcs_formateado[pc] = {
-            "tiempo": pcs[pc]["tiempo"],
-            "tiempo_str": formatear(pcs[pc]["tiempo"])
+            "tiempo": restante,
+            "tiempo_str": formatear(restante),
+            "nota": data.get("nota", "")
         }
 
     return render_template("servidor_panel.html", pcs=pcs_formateado)
+
+# ---------------- REGISTRAR ----------------
 @app.route("/registrar", methods=["POST"])
 def registrar():
     nombre = request.json.get("nombre")
-    if nombre not in pcs:
-        pcs[nombre]={
-            "tiempo":0,
-            "nota":""
-        }
-    if nombre and nombre not in pcs:
-        pcs[nombre] = {"tiempo": 0}
-    return "ok"
-@app.route("/nota", methods=["post"])
-def nota():
-    nombre=request.form.get("nombre")
-    texto =request.form.get("nota","")
-    if nombre not in pcs:
-        pcs[nombre]={
-            "tiempo":0, 
-            "nota":""}
-    pcs[nombre]["nota"]=texto
-    return redirect("/")
 
-@app.route("/asignar", methods=["post"])
+    if nombre not in pcs:
+        pcs[nombre] = {
+            "fin": time.time(),
+            "nota": ""
+        }
+
+    return "ok"
+
+# ---------------- NOTAS ----------------
+@app.route("/nota", methods=["POST"])
+def nota():
+    nombre = request.form.get("nombre")
+    texto = request.form.get("nota", "")
+
+    if nombre not in pcs:
+        pcs[nombre] = {
+            "fin": time.time(),
+            "nota": ""
+        }
+
+    pcs[nombre]["nota"] = texto
+    return ("", 204)
+
+# ---------------- ASIGNAR TIEMPO ----------------
+@app.route("/asignar", methods=["POST"])
 def asignar():
     nombre = request.form.get("nombre")
     minutos = request.form.get("tiempo")
 
-    print("DEBUG nombre:", nombre)
-    print("DEBUG minutos raw:", minutos)
-
-    # 🔥 limpiar input
-    if not minutos or not minutos.isdigit():
-        minutos = 0
-    else:
+    # limpiar input
+    try:
         minutos = int(minutos)
+    except:
+        minutos = 0
 
-    # 🔥 evitar PCs inexistentes
     if nombre not in pcs:
-        pcs[nombre] = {"tiempo": 0}
+        pcs[nombre] = {
+            "fin": time.time(),
+            "nota": ""
+        }
 
-    # 🔥 asignar correctamente
-    pcs[nombre]["tiempo"] = minutos * 60
-
-    print("DEBUG segundos:", pcs[nombre]["tiempo"])
+    # 🔥 AQUÍ ESTÁ LA MAGIA (NO MÁS BUGS)
+    pcs[nombre]["fin"] = time.time() + (minutos * 60)
 
     return redirect("/")
 
-def consola():
-    while True:
-        try:
-            comando = input(">> ")
+# ---------------- DATOS EN TIEMPO REAL ----------------
+@app.route("/datos")
+def datos():
+    ahora = time.time()
+    respuesta = {}
 
-            partes = comando.split()
+    for pc, data in pcs.items():
+        restante = int(data.get("fin", 0) - ahora)
+        if restante < 0:
+            restante = 0
 
-            if len(partes) != 2:
-                print("Formato: PC-1 +30 o PC-1 -10")
-                continue
+        respuesta[pc] = {
+            "tiempo": restante,
+            "nota": data.get("nota", "")
+        }
 
-            nombre = partes[0]
-            cambio = partes[1]
+    return respuesta
 
-            if nombre not in pcs:
-                print("PC no existe")
-                continue
-
-            valor = int(cambio)
-
-            pcs[nombre]["tiempo"] += valor
-
-            # Evitar negativos
-            if pcs[nombre]["tiempo"] < 0:
-                pcs[nombre]["tiempo"] = 0
-
-            print(f"{nombre} ahora tiene {pcs[nombre]['tiempo']} min")
-            if cambio =="reset":
-                pcs[nombre]["tiempo"]=0
-            if "=" in cambio:
-                pcs[nombre]["tiempo"]=int(cambio.replace("=",""))
-
-        except Exception as e:
-            print("Error:", e)
-def formatear_tiempo(minutos):
-    total_segundos = minutos *60
-    h = total_segundos // 3600
-    m = (total_segundos % 3600) // 60
-    s = total_segundos % 60
-    return f"{h:02}:{m:02}:{s:02}"
-@app.route("/estado/<nombre>")
-def estado(nombre):
-    return pcs.get(nombre, {})
-
-# contador
-def contador():
-    while True:
-        for pc in pcs:
-            if pcs[pc]["tiempo"] > 0:
-                pcs[pc]["tiempo"] -= 1
-        time.sleep(1)  # 🔥 baja cada segundo
+# ---------------- FORMATEO ----------------
 def formatear(segundos):
     h = segundos // 3600
     m = (segundos % 3600) // 60
     s = segundos % 60
     return f"{h:02}:{m:02}:{s:02}"
-        
-@app.route("/datos")
-def datos():
-    return pcs
-# hilo
-threading.Thread(target=consola, daemon=True).start()
-threading.Thread(target=contador, daemon=True).start()
 
+# ---------------- RUN ----------------
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=5000, debug=True)
+    app.run(host="0.0.0.0", port=5000, debug=True)

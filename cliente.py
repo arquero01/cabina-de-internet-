@@ -4,9 +4,8 @@ import threading
 import tkinter as tk
 import os 
 
-
 NOMBRE_PC = "PC-1"
-SERVIDOR = "http://127.0.0.1:5000"
+SERVIDOR = "http://0.0.0.0:5000"
 
 # Registrar cliente
 try:
@@ -29,51 +28,57 @@ label_estado = tk.Label(ventana, text="", font=("Arial", 12), bg="#0f172a", fg="
 label_estado.pack(pady=10)
 
 tiempo_restante = 0
+bloqueado = False
 
-# Convertir a formato HH:MM:SS
+# Formato HH:MM:SS
 def formatear(segundos):
     h = segundos // 3600
     m = (segundos % 3600) // 60
     s = segundos % 60
     return f"{h:02}:{m:02}:{s:02}"
 
-# Obtener tiempo del servidor cada cierto tiempo
+# 🔥 CONSULTAR SERVIDOR (AHORA BIEN HECHO)
 def actualizar_servidor():
     global tiempo_restante
     while True:
         try:
-            r = requests.get(f"{SERVIDOR}/estado/{NOMBRE_PC}")
+            r = requests.get(f"{SERVIDOR}/datos")
             data = r.json()
 
-            minutos = data.get("tiempo", 0)
-            tiempo_restante = minutos # convertir a segundos
+            if NOMBRE_PC in data:
+                tiempo_restante = data[NOMBRE_PC]["tiempo"]
 
-        except:
-            pass
+        except Exception as e:
+            print("Error:", e)
 
-        time.sleep(10)  # consulta cada 10 seg
+        time.sleep(1)  # 🔥 ahora cada segundo
 
-# Cuenta regresiva en tiempo real
-bloqueado = False
-
+# 🔥 CONTADOR LOCAL SUAVE
 def contador():
     global tiempo_restante, bloqueado
 
     while True:
         if tiempo_restante > 0:
             tiempo_restante -= 1
+
             label_tiempo.config(text=formatear(tiempo_restante))
+
+            # colores dinámicos
+            if tiempo_restante > 600:
+                label_tiempo.config(fg="#22c55e")  # verde
+            elif tiempo_restante > 60:
+                label_tiempo.config(fg="#f59e0b")  # naranja
+            else:
+                label_tiempo.config(fg="#ef4444")  # rojo
+
             label_estado.config(text="")
             bloqueado = False
-        
 
         else:
             label_tiempo.config(text="00:00:00")
             label_estado.config(text="🔒 TIEMPO TERMINADO")
 
             if not bloqueado:
-                if tiempo_restante == 60:
-                    label_estado.config(text="⚠️ 1 MINUTO RESTANTE")
                 try:
                     os.system("rundll32.exe user32.dll,LockWorkStation")
                     bloqueado = True
@@ -81,6 +86,7 @@ def contador():
                     pass
 
         time.sleep(1)
+
 # Hilos
 threading.Thread(target=actualizar_servidor, daemon=True).start()
 threading.Thread(target=contador, daemon=True).start()
