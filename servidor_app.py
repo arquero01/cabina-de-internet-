@@ -1,7 +1,17 @@
 from flask import Flask, request, render_template, redirect
 import time
+import sys
+import os
 
-app = Flask(__name__)
+
+
+#Detectar entorno (EXE o normal)
+if getattr(sys, 'frozen', False):
+    base_dir = sys._MEIPASS
+else:
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+
+app = Flask(__name__, template_folder=os.path.join(base_dir, 'templates'))
 
 pcs = {}
 
@@ -58,7 +68,6 @@ def asignar():
     nombre = request.form.get("nombre")
     minutos = request.form.get("tiempo")
 
-    # limpiar input
     try:
         minutos = int(minutos)
     except:
@@ -70,7 +79,7 @@ def asignar():
             "nota": ""
         }
 
-    # 🔥 AQUÍ ESTÁ LA MAGIA (NO MÁS BUGS)
+    #tiempo absoluto
     pcs[nombre]["fin"] = time.time() + (minutos * 60)
 
     return redirect("/")
@@ -102,4 +111,4 @@ def formatear(segundos):
 
 # ---------------- RUN ----------------
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(host="0.0.0.0", port=5000, debug=False)  

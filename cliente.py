@@ -2,17 +2,20 @@ import requests
 import time
 import threading
 import tkinter as tk
-import os 
+import os
+import socket
 
-NOMBRE_PC = "PC-1"
-SERVIDOR = "http://0.0.0.0:5000"
+# ---------------- CONFIG ----------------
+SERVIDOR = "http://127.0.0.1:5000"
+NOMBRE_PC = socket.gethostname()
 
-# Registrar cliente
-try:
-    requests.post(f"{SERVIDOR}/registrar", json={"nombre": NOMBRE_PC})
-except:
-    pass
+# ---------------- VARIABLES ----------------
+tiempo_restante = 0
+bloqueado = False
+ventana_bloqueo = None
+gracia_hasta = 0
 
+# ---------------- UI ----------------
 ventana = tk.Tk()
 ventana.title("Cliente Cabina")
 ventana.geometry("300x200")
@@ -27,19 +30,87 @@ label_tiempo.pack(pady=10)
 label_estado = tk.Label(ventana, text="", font=("Arial", 12), bg="#0f172a", fg="red")
 label_estado.pack(pady=10)
 
-tiempo_restante = 0
-bloqueado = False
+# ---------------- FUNCIONES ----------------
 
-# Formato HH:MM:SS
+def ejecutar_ui(func):
+    ventana.after(0, func)
+
 def formatear(segundos):
     h = segundos // 3600
     m = (segundos % 3600) // 60
     s = segundos % 60
     return f"{h:02}:{m:02}:{s:02}"
 
-# 🔥 CONSULTAR SERVIDOR (AHORA BIEN HECHO)
+# ---------------- BLOQUEO ----------------
+
+def mostrar_bloqueo():
+    global ventana_bloqueo
+
+    if ventana_bloqueo:
+        return
+
+    ventana_bloqueo = tk.Toplevel()
+    ventana_bloqueo.attributes("-fullscreen", True)
+    ventana_bloqueo.configure(bg="#020617")
+    ventana_bloqueo.attributes("-topmost", True)
+
+    label = tk.Label(
+        ventana_bloqueo,
+        text="⛔ TIEMPO TERMINADO",
+        font=("Arial", 40, "bold"),
+        fg="red",
+        bg="#020617"
+    )
+    label.pack(expand=True)
+
+    sub = tk.Label(
+        ventana_bloqueo,
+        text="Contacte al administrador",
+        font=("Arial", 18),
+        fg="white",
+        bg="#020617"
+    )
+    sub.pack()
+
+    #BOTÓN DE PRUEBA (ACTIVA GRACIA)
+    btn = tk.Button(
+        ventana_bloqueo,
+        text="DESBLOQUEAR (TEST)",
+        command=lambda: desbloqueo_manual(None),
+        bg="red",
+        fg="white"
+    )
+    btn.pack(pady=20)
+
+    # ATAJO GARANTIZADO
+    ventana_bloqueo.bind("<Control-Shift-U>", desbloqueo_manual)
+
+    # bloquear cerrar
+    ventana_bloqueo.protocol("WM_DELETE_WINDOW", lambda: None)
+
+def quitar_bloqueo():
+    global ventana_bloqueo
+
+    if ventana_bloqueo:
+        ventana_bloqueo.destroy()
+        ventana_bloqueo = None
+
+def desbloqueo_manual(event):
+    global bloqueado, gracia_hasta
+
+    quitar_bloqueo()
+    bloqueado = False
+
+    # activar minuto de gracia
+    gracia_hasta = time.time() + 60
+
+    ejecutar_ui(lambda: label_estado.config(text="⚠️ MODO PRUEBA: 1 MINUTO"))
+
+# ---------------- SERVIDOR ----------------
+
 def actualizar_servidor():
-    global tiempo_restante
+    global tiempo_restante, bloqueado, gracia_hasta
+
     while True:
         try:
             r = requests.get(f"{SERVIDOR}/datos")
@@ -48,46 +119,62 @@ def actualizar_servidor():
             if NOMBRE_PC in data:
                 tiempo_restante = data[NOMBRE_PC]["tiempo"]
 
-        except Exception as e:
-            print("Error:", e)
+                ahora = time.time()
 
-        time.sleep(1)  # 🔥 ahora cada segundo
+                # TIENE TIEMPO
+                if tiempo_restante > 0:
+                    if bloqueado:
+                        ejecutar_ui(quitar_bloqueo)
+                        bloqueado = False
 
-# 🔥 CONTADOR LOCAL SUAVE
+                    gracia_hasta = 0
+
+                    ejecutar_ui(lambda: label_estado.config(text=""))
+
+                # SIN TIEMPO
+                else:
+                    if ahora < gracia_hasta:
+                        restante = int(gracia_hasta - ahora)
+
+                        ejecutar_ui(lambda: label_estado.config(
+                            text=f"⚠️ Agrega tiempo ({restante}s)"
+                        ))
+
+                    else:
+                        if not bloqueado:
+                            ejecutar_ui(mostrar_bloqueo)
+                            bloqueado = True
+
+        except:
+            pass
+
+        time.sleep(3)
+
+# ---------------- CONTADOR ----------------
+
 def contador():
-    global tiempo_restante, bloqueado
+    global tiempo_restante
 
     while True:
         if tiempo_restante > 0:
             tiempo_restante -= 1
 
-            label_tiempo.config(text=formatear(tiempo_restante))
-
-            # colores dinámicos
-            if tiempo_restante > 600:
-                label_tiempo.config(fg="#22c55e")  # verde
-            elif tiempo_restante > 60:
-                label_tiempo.config(fg="#f59e0b")  # naranja
-            else:
-                label_tiempo.config(fg="#ef4444")  # rojo
-
-            label_estado.config(text="")
-            bloqueado = False
-
+            ejecutar_ui(lambda: label_tiempo.config(
+                text=formatear(tiempo_restante)
+            ))
         else:
-            label_tiempo.config(text="00:00:00")
-            label_estado.config(text="🔒 TIEMPO TERMINADO")
-
-            if not bloqueado:
-                try:
-                    os.system("rundll32.exe user32.dll,LockWorkStation")
-                    bloqueado = True
-                except:
-                    pass
+            ejecutar_ui(lambda: label_tiempo.config(text="00:00:00"))
 
         time.sleep(1)
 
-# Hilos
+# ---------------- INICIO ----------------
+
+# registrar cliente
+try:
+    requests.post(f"{SERVIDOR}/registrar", json={"nombre": NOMBRE_PC})
+except:
+    pass
+
 threading.Thread(target=actualizar_servidor, daemon=True).start()
 threading.Thread(target=contador, daemon=True).start()
 
