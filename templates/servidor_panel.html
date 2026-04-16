@@ -1,241 +1,169 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Control Cabina</title>
+    <title>Control Cabina PRO</title>
+
     <style>
         body {
             margin: 0;
-            font-family: Arial, sans-serif;
-            background: #0f172a;
+            font-family: 'Segoe UI', sans-serif;
+            background: #020617;
             color: #e2e8f0;
         }
 
         h1 {
             text-align: center;
             padding: 20px;
-            font-size: 32px;
         }
 
         .contenedor {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
             gap: 25px;
             padding: 25px;
         }
 
         .pc {
-            background: #1e293b;
+            background: #0f172a;
             border-radius: 20px;
             padding: 20px;
-            box-shadow: 0 0 15px rgba(0,0,0,0.6);
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-        }
-
-        .pc h2 {
-            margin: 0;
-            text-align: center;
         }
 
         .tiempo {
             font-size: 32px;
             text-align: center;
-            font-weight: bold;
         }
 
-        .activo { color: #22c55e; }
-        .medio { color: #f59e0b; }
-        .agotado { color: #ef4444; }
-
-        .seccion {
-            background: #0f172a;
-            padding: 10px;
-            border-radius: 10px;
+        .precio {
+            text-align: center;
+            color: #38bdf8;
+            margin-bottom: 10px;
         }
 
-        input {
+        input, textarea {
             width: 100%;
             padding: 8px;
             border-radius: 8px;
             border: none;
-            margin-top: 5px;
+            margin-top: 8px;
         }
 
         button {
             width: 100%;
-            margin-top: 8px;
-            padding: 8px;
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 10px;
             border: none;
-            border-radius: 8px;
-            background: #22c55e;
-            color: black;
             cursor: pointer;
             font-weight: bold;
         }
 
-        button:hover {
-            background: #16a34a;
-        }
-
-        .botones-rapidos {
-            display: flex;
-            gap: 5px;
-        }
-
-        .botones-rapidos button {
-            flex: 1;
-            background: #38bdf8;
-        }
+        .btn-asignar { background: #22c55e; }
+        .btn-cobrar { background: #ef4444; color: white; }
     </style>
 </head>
+
 <body>
 
-<h1>🖥️ Panel de Control Cabina</h1>
+<h1>🖥️ Control Cabina PRO</h1>
 
 <div class="contenedor">
-    {% for pc, data in pcs.items() %}
-    <div class="pc">
+{% for pc, data in pcs.items() %}
+<div class="pc">
 
-        <h2>{{ pc }}</h2>
+    <h2>{{ pc }}</h2>
 
-        <!-- TIEMPO -->
-        <div class="tiempo 
-            {% if data.tiempo > 1800 %}
-                activo
-            {% elif data.tiempo > 600 %}
-                medio
-            {% else %}
-                agotado
-            {% endif %}
-        " id="tiempo-{{ pc }}">
-            {{ data.tiempo_str }}
-        </div>
-        <div id="acciones-{{ pc }}"></div>
-
-        <!-- ASIGNAR TIEMPO -->
-        <div class="seccion">
-            <form action="/asignar" method="post">
-                <input type="hidden" name="nombre" value="{{ pc }}">
-                <input type="text" name="tiempo_input" class="input-tiempo" placeholder="Ej: 2 o .30 o 1.30" required>
-                <button>Asignar Tiempo</button>
-            </form>
-        </div>
-
-        <!-- CONSUMO -->
-        <div class="seccion">
-            <form action="/nota" method="post">
-                <input type="hidden" name="nombre" value="{{ pc }}">
-                <textarea name="nota" rows="4" placeholder="Escribe comsumo... ">{{ data.nota }}</textarea>
-            </form>
-        </div>
-
+    <div class="tiempo" id="tiempo-{{ pc }}">
+        {{ data.tiempo_str }}
     </div>
-    {% endfor %}
+
+    <div class="precio">
+        💰 ${{ data.costo }}
+    </div>
+
+    <!-- ASIGNAR -->
+    <form action="/asignar" method="post" onsubmit="return procesar(this)">
+        <input type="hidden" name="nombre" value="{{ pc }}">
+        <input type="text" name="entrada" placeholder="Ej: 2 o .30 o 1.30" required>
+        <button class="btn-asignar">Asignar Tiempo</button>
+    </form>
+
+    <!-- NOTAS -->
+    <form action="/nota" method="post">
+        <input type="hidden" name="nombre" value="{{ pc }}">
+        <textarea name="nota">{{ data.nota }}</textarea>
+    </form>
+
+    <!-- COBRAR -->
+    <form action="/cobrar" method="post" onsubmit="return confirmarCobro('{{ pc }}')">
+        <input type="hidden" name="nombre" value="{{ pc }}">
+        <button class="btn-cobrar">💰 Cobrar y liberar</button>
+    </form>
+
+</div>
+{% endfor %}
 </div>
 
 <script>
-let alertados = {};
+function convertir(valor){
+    valor = valor.trim();
 
-async function actualizar() {
-    try {
-        const res = await fetch("/datos");
-        const data = await res.json();
-
-        for (let pc in data) {
-
-            let tiempo = data[pc].tiempo; 
-
-            let h = Math.floor(tiempo / 3600);
-            let m = Math.floor((tiempo % 3600) / 60);
-            let s = tiempo % 60;
-
-            let texto =
-                String(h).padStart(2, '0') + ":" +
-                String(m).padStart(2, '0') + ":" +
-                String(s).padStart(2, '0');
-
-            let el = document.getElementById("tiempo-" + pc);
-            if (el) el.textContent = texto;
-
-            // 🚨 ALERTA CUANDO TERMINA
-            if (tiempo === 0 && !alertados[pc]) {
-                alertados[pc] = true;
-
-                let cont = document.getElementById("acciones-" + pc);
-                if (cont) {
-                    cont.innerHTML = `
-                        <div style="color:red;">⏰ Tiempo terminado</div>
-                        <button onclick="agregarTiempo('${pc}', 30)">+30 min</button>
-                        <button onclick="agregarTiempo('${pc}', 60)">+60 min</button>
-                    `;
-                }
-            }
-        }
-    } catch (error) {
-        console.log("ERROR:", error);
+    if(valor.includes(".")){
+        let [h,m] = valor.split(".");
+        return (parseInt(h||0)*60)+(parseInt(m||0));
     }
+    return parseInt(valor||0)*60;
 }
 
-function agregarTiempo(pc, minutos) {
-    fetch("/asignar", {
-        method: "POST",
-        headers: {"Content-Type": "application/x-www-form-urlencoded"},
-        body: `nombre=${pc}&tiempo=${minutos}`
-    });
+function procesar(form){
+    let input = form.querySelector("input[name='entrada']");
+    let minutos = convertir(input.value);
+
+    let hidden = document.createElement("input");
+    hidden.type = "hidden";
+    hidden.name = "tiempo";
+    hidden.value = minutos;
+
+    form.appendChild(hidden);
+    return true;
 }
 
-// 🔥 IMPORTANTE
-window.onload = () => {
-    setInterval(actualizar, 1000);
-};
-</script>
-<script>
-    function convertirTiempo(valor){
-        valor = valor.trim();
-        if (valor.includes(".")){
-            let partes = valor.split(".");
-            let horas = parseInt(partes[0]) || 0;
-            let minutos = parseInt(partes[1]) || 0;
-            return (horas * 60) + minutos;
-        }else {
-            return parseInt(valor)*60;
-        }
+function confirmarCobro(pc){
+    return confirm("¿Cobrar y liberar " + pc + "?");
+}
+
+// 🔥 ACTUALIZACIÓN EN TIEMPO REAL
+setInterval(async () => {
+    let res = await fetch("/datos");
+    let data = await res.json();
+
+    for (let pc in data){
+        let t = data[pc].tiempo;
+
+        let h = Math.floor(t/3600);
+        let m = Math.floor((t%3600)/60);
+        let s = t%60;
+
+        let txt =
+            String(h).padStart(2,'0') + ":" +
+            String(m).padStart(2,'0') + ":" +
+            String(s).padStart(2,'0');
+
+        let el = document.getElementById("tiempo-"+pc);
+        if(el) el.textContent = txt;
     }
-</script>
-<script>
-document.querySelectorAll(".input-tiempo").forEach(input =>{
-    input.addEventListener("keydown", function(e){
-        if (e.key === "Enter"){
-            e.preventDefault();
+}, 1000);
 
-            let valor = this.value;
-            let minutos = convertirTiempo(valor);
-
-            let form = this.closest("form");
-
-            let hidden = document.createElement("input");
-            hidden.type = "hidden";
-            hidden.name = "tiempo";
-            hidden.value = minutos;
-
-            form.appendChild(hidden);
-            form.submit();
-        }
-    });
-});
-</script>
-<script>
-    document.querySelectorAll("textarea").forEach(area =>{
-        area.addEventListener("keyup", function(){
-            let form = this.closest("form");
-            let data = new FormData(form);
-            fetch("/nota", {
-                method: "post",
-                body: data
-            });
+// GUARDAR NOTAS AUTOMÁTICO
+document.querySelectorAll("textarea").forEach(t=>{
+    t.addEventListener("keyup", ()=>{
+        let form = t.closest("form");
+        fetch("/nota", {
+            method: "POST",
+            body: new FormData(form)
         });
     });
+});
 </script>
 
 </body>
