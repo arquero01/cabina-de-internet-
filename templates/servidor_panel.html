@@ -1,71 +1,125 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
-    <title>Control Cabina PRO</title>
+<meta charset="UTF-8">
+<title>CyberControl Pro</title>
 
-    <style>
-        body {
-            margin: 0;
-            font-family: 'Segoe UI', sans-serif;
-            background: #020617;
-            color: #e2e8f0;
-        }
+<style>
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
 
-        h1 {
-            text-align: center;
-            padding: 20px;
-        }
+body {
+    font-family: "Segoe UI", sans-serif;
+    background: #020617;
+    color: #e2e8f0;
+}
 
-        .contenedor {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-            gap: 25px;
-            padding: 25px;
-        }
+/* HEADER */
+.header {
+    background: #020617;
+    border-bottom: 1px solid #1e293b;
+    padding: 15px 25px;
+    font-size: 24px;
+    font-weight: bold;
+    color: #38bdf8;
+}
 
-        .pc {
-            background: #0f172a;
-            border-radius: 20px;
-            padding: 20px;
-        }
+/* GRID */
+.contenedor {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 20px;
+    padding: 20px;
+}
 
-        .tiempo {
-            font-size: 32px;
-            text-align: center;
-        }
+/* TARJETA */
+.pc {
+    background: #0f172a;
+    border-radius: 16px;
+    padding: 18px;
+    box-shadow: 0 0 15px rgba(0,0,0,0.6);
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    transition: 0.2s;
+}
 
-        .precio {
-            text-align: center;
-            color: #38bdf8;
-            margin-bottom: 10px;
-        }
+.pc:hover {
+    transform: scale(1.02);
+}
 
-        input, textarea {
-            width: 100%;
-            padding: 8px;
-            border-radius: 8px;
-            border: none;
-            margin-top: 8px;
-        }
+/* NOMBRE */
+.pc h2 {
+    text-align: center;
+    color: #38bdf8;
+}
 
-        button {
-            width: 100%;
-            margin-top: 10px;
-            padding: 10px;
-            border-radius: 10px;
-            border: none;
-            cursor: pointer;
-            font-weight: bold;
-        }
+/* TIEMPO */
+.tiempo {
+    font-size: 36px;
+    text-align: center;
+    font-weight: bold;
+    letter-spacing: 2px;
+}
 
-        .btn-asignar { background: #22c55e; }
-        .btn-cobrar { background: #ef4444; color: white; }
-    </style>
+/* ESTADOS */
+.activo { color: #22c55e; }
+.medio { color: #f59e0b; }
+.agotado { color: #ef4444; }
+
+/* BLOQUES */
+.bloque {
+    background: #020617;
+    padding: 10px;
+    border-radius: 10px;
+}
+
+/* INPUTS */
+input, textarea {
+    width: 100%;
+    padding: 10px;
+    border-radius: 8px;
+    border: none;
+    background: #020617;
+    color: white;
+    border: 1px solid #1e293b;
+}
+
+/* BOTONES */
+button {
+    width: 100%;
+    padding: 10px;
+    margin-top: 8px;
+    border: none;
+    border-radius: 8px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.btn-asignar {
+    background: #22c55e;
+}
+
+.btn-reset {
+    background: #ef4444;
+    color: white;
+}
+
+/* COSTO */
+.costo {
+    text-align: center;
+    font-size: 18px;
+    color: #facc15;
+}
+</style>
 </head>
 
 <body>
 
-<h1>🖥️ Control Cabina PRO</h1>
+<div class="header">🖥️ CyberControl Pro</div>
 
 <div class="contenedor">
 {% for pc, data in pcs.items() %}
@@ -73,31 +127,45 @@
 
     <h2>{{ pc }}</h2>
 
-    <div class="tiempo" id="tiempo-{{ pc }}">
+    <!-- TIEMPO -->
+    <div class="tiempo 
+        {% if data.tiempo > 1800 %}
+            activo
+        {% elif data.tiempo > 300 %}
+            medio
+        {% else %}
+            agotado
+        {% endif %}
+    " id="tiempo-{{ pc }}">
         {{ data.tiempo_str }}
     </div>
 
-    <div class="precio">
+    <!-- COSTO -->
+    <div class="costo">
         💰 ${{ data.costo }}
     </div>
 
     <!-- ASIGNAR -->
-    <form action="/asignar" method="post" onsubmit="return procesar(this)">
-        <input type="hidden" name="nombre" value="{{ pc }}">
-        <input type="text" name="entrada" placeholder="Ej: 2 o .30 o 1.30" required>
-        <button class="btn-asignar">Asignar Tiempo</button>
-    </form>
+    <div class="bloque">
+        <form onsubmit="return enviarTiempo(this)">
+            <input type="hidden" name="nombre" value="{{ pc }}">
+            <input type="text" name="tiempo_input" placeholder="Ej: 2 o .30 o 1.30" required>
+            <button class="btn-asignar">Asignar Tiempo</button>
+        </form>
+    </div>
 
-    <!-- NOTAS -->
-    <form action="/nota" method="post">
-        <input type="hidden" name="nombre" value="{{ pc }}">
-        <textarea name="nota">{{ data.nota }}</textarea>
-    </form>
+    <!-- CONSUMO -->
+    <div class="bloque">
+        <form>
+            <input type="hidden" name="nombre" value="{{ pc }}">
+            <textarea name="nota" rows="3" placeholder="Consumo...">{{ data.nota }}</textarea>
+        </form>
+    </div>
 
-    <!-- COBRAR -->
-    <form action="/cobrar" method="post" onsubmit="return confirmarCobro('{{ pc }}')">
+    <!-- RESET -->
+    <form action="/reset" method="post">
         <input type="hidden" name="nombre" value="{{ pc }}">
-        <button class="btn-cobrar">💰 Cobrar y liberar</button>
+        <button class="btn-reset">Cobrar y Resetear</button>
     </form>
 
 </div>
@@ -105,19 +173,47 @@
 </div>
 
 <script>
-function convertir(valor){
+// 🔄 TIEMPO EN VIVO
+async function actualizar() {
+    const res = await fetch("/datos");
+    const data = await res.json();
+
+    for (let pc in data) {
+        let tiempo = data[pc].tiempo;
+
+        let h = Math.floor(tiempo / 3600);
+        let m = Math.floor((tiempo % 3600) / 60);
+        let s = tiempo % 60;
+
+        let texto =
+            String(h).padStart(2,'0') + ":" +
+            String(m).padStart(2,'0') + ":" +
+            String(s).padStart(2,'0');
+
+        let el = document.getElementById("tiempo-" + pc);
+        if (el) el.textContent = texto;
+    }
+}
+setInterval(actualizar, 1000);
+
+// 🔥 CONVERTIR TIEMPO
+function convertirTiempo(valor){
     valor = valor.trim();
 
-    if(valor.includes(".")){
-        let [h,m] = valor.split(".");
-        return (parseInt(h||0)*60)+(parseInt(m||0));
+    if (valor.includes(".")){
+        let partes = valor.split(".");
+        let h = parseInt(partes[0]) || 0;
+        let m = parseInt(partes[1]) || 0;
+        return (h * 60) + m;
+    } else {
+        return parseInt(valor) * 60;
     }
-    return parseInt(valor||0)*60;
 }
 
-function procesar(form){
-    let input = form.querySelector("input[name='entrada']");
-    let minutos = convertir(input.value);
+// 🔥 ENVIAR FORMULARIO
+function enviarTiempo(form){
+    let input = form.querySelector("input[name='tiempo_input']");
+    let minutos = convertirTiempo(input.value);
 
     let hidden = document.createElement("input");
     hidden.type = "hidden";
@@ -125,42 +221,21 @@ function procesar(form){
     hidden.value = minutos;
 
     form.appendChild(hidden);
+    form.action = "/asignar";
+    form.method = "post";
+
     return true;
 }
 
-function confirmarCobro(pc){
-    return confirm("¿Cobrar y liberar " + pc + "?");
-}
+// 🔥 GUARDAR CONSUMO AUTOMÁTICO
+document.querySelectorAll("textarea").forEach(area =>{
+    area.addEventListener("keyup", function(){
+        let form = this.closest("form");
+        let data = new FormData(form);
 
-// 🔥 ACTUALIZACIÓN EN TIEMPO REAL
-setInterval(async () => {
-    let res = await fetch("/datos");
-    let data = await res.json();
-
-    for (let pc in data){
-        let t = data[pc].tiempo;
-
-        let h = Math.floor(t/3600);
-        let m = Math.floor((t%3600)/60);
-        let s = t%60;
-
-        let txt =
-            String(h).padStart(2,'0') + ":" +
-            String(m).padStart(2,'0') + ":" +
-            String(s).padStart(2,'0');
-
-        let el = document.getElementById("tiempo-"+pc);
-        if(el) el.textContent = txt;
-    }
-}, 1000);
-
-// GUARDAR NOTAS AUTOMÁTICO
-document.querySelectorAll("textarea").forEach(t=>{
-    t.addEventListener("keyup", ()=>{
-        let form = t.closest("form");
         fetch("/nota", {
-            method: "POST",
-            body: new FormData(form)
+            method: "post",
+            body: data
         });
     });
 });

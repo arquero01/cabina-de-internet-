@@ -1,10 +1,33 @@
 from flask import Flask, request, render_template, redirect
 import time
+import sys
+import os
+import threading
+import webview  # 🔥 clave para app sin navegador
 
-app = Flask(__name__)
+# ---------------- CONFIG ----------------
+PRECIO_POR_MINUTO = 26
 
+# ---------------- FIX PYINSTALLER ----------------
+if getattr(sys, 'frozen', False):
+    base_dir = sys._MEIPASS
+else:
+    base_dir = os.path.abspath(".")
+
+app = Flask(__name__, template_folder=os.path.join(base_dir, "templates"))
+
+# ---------------- MEMORIA ----------------
 pcs = {}
-PRECIO_MINUTO = 26  # 💰 precio por minuto
+contador_pcs = 1
+
+# ---------------- GENERAR NOMBRE ----------------
+def generar_nombre():
+    global contador_pcs
+    while True:
+        nombre = f"PC-{contador_pcs:02}"
+        contador_pcs += 1
+        if nombre not in pcs:
+            return nombre
 
 # ---------------- PANEL ----------------
 @app.route("/")
@@ -17,10 +40,8 @@ def panel():
         if restante < 0:
             restante = 0
 
-        usado = int(data.get("fin", 0) - data.get("inicio", ahora))
-        usado = max(0, usado - restante)
-
-        costo = int((usado / 60) * PRECIO_MINUTO)
+        usado = int(data.get("usado", 0) + max(0, (ahora - data.get("inicio", ahora))))
+        costo = int((usado / 60) * PRECIO_POR_MINUTO)
 
         pcs_formateado[pc] = {
             "tiempo": restante,
@@ -31,101 +52,80 @@ def panel():
 
     return render_template("servidor_panel.html", pcs=pcs_formateado)
 
-# ---------------- REGISTRAR ----------------
+# ---------------- REGISTRAR AUTO ----------------
 @app.route("/registrar", methods=["POST"])
 def registrar():
-    data = request.json
+    nombre_cliente = request.json.get("nombre")
 
-    nombre = data.get("nombre")
-    ip = request.remote_addr
+    for pc, data in pcs.items():
+        if data.get("id_cliente") == nombre_cliente:
+            data["last_seen"] = time.time()
+            return {"nombre": pc}
 
-    if nombre not in pcs:
-        pcs[nombre] = {
-            "fin": time.time(),
-            "nota": "",
-            "ip": ip,
-            "activo": True
-        }
-    else:
-        # actualizar info si ya existe
-        pcs[nombre]["ip"] = ip
-        pcs[nombre]["activo"] = True
+    nombre = generar_nombre()
 
-    return "ok"
-# ---------------- NOTAS ----------------
+    pcs[nombre] = {
+        "fin": time.time(),
+        "inicio": time.time(),
+        "usado": 0,
+        "nota": "",
+        "id_cliente": nombre_cliente,
+        "last_seen": time.time()
+    }
+
+    print(f"🖥️ Nueva PC registrada: {nombre}")
+    return {"nombre": nombre}
+
+# ---------------- NOTA ----------------
 @app.route("/nota", methods=["POST"])
 def nota():
     nombre = request.form.get("nombre")
     texto = request.form.get("nota", "")
 
-    if nombre not in pcs:
-        pcs[nombre] = {
-            "fin": time.time(),
-            "inicio": time.time(),
-            "nota": ""
-        }
+    if nombre in pcs:
+        pcs[nombre]["nota"] = texto
+        pcs[nombre]["last_seen"] = time.time()
 
-    pcs[nombre]["nota"] = texto
     return ("", 204)
 
-# ---------------- ASIGNAR TIEMPO ----------------
+# ---------------- ASIGNAR ----------------
 @app.route("/asignar", methods=["POST"])
 def asignar():
     nombre = request.form.get("nombre")
+    minutos = request.form.get("tiempo")
 
     try:
-        minutos = int(request.form.get("tiempo", 0))
+        minutos = int(minutos)
     except:
         minutos = 0
 
-    ahora = time.time()
-
-    if nombre not in pcs:
-        pcs[nombre] = {
-            "fin": ahora,
-            "inicio": ahora,
-            "nota": ""
-        }
-
-    # 🔥 sumar tiempo correctamente
-    if pcs[nombre]["fin"] > ahora:
-        pcs[nombre]["fin"] += minutos * 60
-    else:
+    if nombre in pcs:
+        ahora = time.time()
+        pcs[nombre]["usado"] += max(0, ahora - pcs[nombre]["inicio"])
         pcs[nombre]["inicio"] = ahora
         pcs[nombre]["fin"] = ahora + (minutos * 60)
+        pcs[nombre]["last_seen"] = ahora
 
     return redirect("/")
 
-# ---------------- COBRAR Y RESET ----------------
-@app.route("/cobrar", methods=["POST"])
-def cobrar():
+# ---------------- RESET ----------------
+@app.route("/reset", methods=["POST"])
+def reset():
     nombre = request.form.get("nombre")
-    ahora = time.time()
 
     if nombre in pcs:
-        data = pcs[nombre]
-
-        restante = int(data["fin"] - ahora)
-        if restante < 0:
-            restante = 0
-
-        usado = int(data["fin"] - data["inicio"])
-        usado = max(0, usado - restante)
-
-        costo = int((usado / 60) * PRECIO_MINUTO)
-
-        print(f"💰 COBRO {nombre}: ${costo}")
-
-        # 🔥 RESET PC
         pcs[nombre] = {
-            "fin": ahora,
-            "inicio": ahora,
-            "nota": ""
+            "fin": time.time(),
+            "inicio": time.time(),
+            "usado": 0,
+            "nota": "",
+            "id_cliente": pcs[nombre].get("id_cliente"),
+            "last_seen": time.time()
         }
 
     return redirect("/")
 
-# ---------------- DATOS EN TIEMPO REAL ----------------
+# ---------------- DATOS ----------------
 @app.route("/datos")
 def datos():
     ahora = time.time()
@@ -139,10 +139,11 @@ def datos():
         respuesta[pc] = {
             "tiempo": restante,
             "nota": data.get("nota", ""),
-            "activo": data.get("activo", False)
+            "last_seen": data.get("last_seen", 0)
         }
 
     return respuesta
+
 # ---------------- FORMATO ----------------
 def formatear(segundos):
     h = segundos // 3600
@@ -150,6 +151,22 @@ def formatear(segundos):
     s = segundos % 60
     return f"{h:02}:{m:02}:{s:02}"
 
-# ---------------- RUN ----------------
+# ---------------- INICIAR SERVIDOR ----------------
+def iniciar_flask():
+    app.run(host="127.0.0.1", port=5000, debug=False)
+
+# ---------------- APP DESKTOP ----------------
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=False)
+    # 🔥 correr flask en segundo plano
+    threading.Thread(target=iniciar_flask, daemon=True).start()
+
+    # 🔥 abrir app tipo software
+    webview.create_window(
+        "CyberControl PRO",
+        "http://127.0.0.1:5000",
+        width=1200,
+        height=800,
+        resizable=True
+    )
+
+    webview.start()
